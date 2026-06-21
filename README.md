@@ -31,6 +31,8 @@ Every size is published as GGUF (f16, q8_0; base also f32) in the single collect
 | [ced-small](https://huggingface.co/mispeech/ced-small) | 22M  | 49.6 | 42 MB | 23 MB | balanced |
 | [ced-base](https://huggingface.co/mispeech/ced-base)   | 86M  | 50.0 | 165 MB | 88 MB | accuracy default (also f32, 328 MB) |
 
+![CED family GGUF sizes: 6 MB (tiny/q8_0) to 165 MB (base/f16)](media/family.png)
+
 CED is a plain AST/DeiT Vision Transformer over a log-mel spectrogram, which makes it a clean ggml port: no relative-position bias, no gated attention, no convolution stack. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 The output is **multi-label**: each of the 527 classes gets an independent probability, so a clip can be "Speech" + "Music" + "Vehicle" at once. The full class list is embedded in every GGUF.
@@ -56,6 +58,8 @@ The residual differences are f32 floating-point round-off (the mel FFT and the m
 ## Performance
 
 ced.cpp is faster than the PyTorch reference on CPU and uses a fraction of the memory, with the same tags. Numbers below: ced-base, a 10 s clip, AMD Ryzen 9 9950X3D, 4 threads (RTF is audio-seconds over processing-seconds, higher is faster). Full detail in [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
+
+![ced.cpp vs PyTorch CED on CPU: lower latency and a fraction of the memory](media/bench.png)
 
 | | latency / clip | realtime factor | peak RAM |
 | --- | --- | --- | --- |
