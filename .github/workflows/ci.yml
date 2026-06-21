@@ -1,0 +1,36 @@
+name: ci
+
+# Fast compile + smoke gate on every push and PR. Builds ced-cli (portable
+# GGML_NATIVE=OFF) and checks the usage banner. The numerical-parity ctests
+# need the PyTorch reference fixtures (generated from the upstream model), so
+# they run in the dedicated parity workflow, not here.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure + build
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_NATIVE=OFF \
+            -DCED_BUILD_CLI=ON \
+            -DCED_BUILD_TESTS=OFF
+          cmake --build build -j"$(nproc)"
+
+      - name: Smoke test (usage banner)
+        run: |
+          out=$(./build/examples/cli/ced-cli 2>&1 || true)
+          grep -qi usage <<<"$out"

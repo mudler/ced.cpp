@@ -1,0 +1,341 @@
+name: release
+
+# Pre-built ced-cli bundles for every release.
+#
+# One self-contained binary per (platform, backend) pair, packaged with the
+# LICENSE and README, plus a shared libced C-API bundle. BUILD_SHARED_LIBS=OFF
+# folds the ggml backends into the binary, so a download-and-run bundle needs no
+# lib directory. GGML_NATIVE=OFF keeps the binaries portable across CPUs.
+#
+# CED is tiny and CPU-fast, so v0.x ships CPU everywhere plus macOS Metal. GPU
+# variants (CUDA/Vulkan) can be added to the matrices later (the CMake flags
+# CED_GGML_CUDA / CED_GGML_VULKAN already exist).
+#
+# Triggers: pushing a v* tag builds everything and attaches the bundles to the
+# GitHub release for that tag (creating a draft release if none exists yet).
+# workflow_dispatch builds the same bundles as workflow artifacts.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # linux: cpu on x64 + arm64 (native runners), built on ubuntu-22.04 for a
+  # wider glibc range.
+  # ---------------------------------------------------------------------------
+  build-linux:
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - backend: cpu
+            arch: x64
+            runner: ubuntu-22.04
+          - backend: cpu
+            arch: arm64
+            runner: ubuntu-22.04-arm
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Determine version
+        id: ver
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Configure
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_NATIVE=OFF \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DCED_BUILD_CLI=ON \
+            -DCED_BUILD_TESTS=OFF
+
+      - name: Build
+        run: cmake --build build -j"$(getconf _NPROCESSORS_ONLN)"
+
+      - name: Smoke test (usage banner)
+        run: |
+          out=$(./build/examples/cli/ced-cli 2>&1 || true)
+          grep -qi usage <<<"$out"
+
+      - name: Package (CLI)
+        id: pack
+        run: |
+          BUNDLE="ced-${{ steps.ver.outputs.version }}-bin-linux-${{ matrix.backend }}-${{ matrix.arch }}"
+          mkdir "$BUNDLE"
+          cp build/examples/cli/ced-cli LICENSE README.md "$BUNDLE"/
+          tar -czf "$BUNDLE.tar.gz" "$BUNDLE"
+          echo "bundle=$BUNDLE" >> "$GITHUB_OUTPUT"
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.pack.outputs.bundle }}
+          path: ${{ steps.pack.outputs.bundle }}.tar.gz
+          if-no-files-found: error
+
+      - name: Configure (shared C-API lib)
+        run: |
+          cmake -B build-shared \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_NATIVE=OFF \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+            -DCED_SHARED=ON \
+            -DCED_BUILD_CLI=OFF \
+            -DCED_BUILD_TESTS=OFF
+
+      - name: Build (shared C-API lib)
+        run: cmake --build build-shared -j"$(getconf _NPROCESSORS_ONLN)"
+
+      - name: Package (shared C-API lib)
+        id: pack_lib
+        run: |
+          BUNDLE="ced-${{ steps.ver.outputs.version }}-lib-linux-${{ matrix.backend }}-${{ matrix.arch }}"
+          mkdir "$BUNDLE"
+          cp build-shared/libced.so include/ced_capi.h LICENSE README.md "$BUNDLE"/
+          tar -czf "$BUNDLE.tar.gz" "$BUNDLE"
+          echo "bundle=$BUNDLE" >> "$GITHUB_OUTPUT"
+
+      - name: Upload shared C-API lib artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.pack_lib.outputs.bundle }}
+          path: ${{ steps.pack_lib.outputs.bundle }}.tar.gz
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # macos: metal on arm64 (the metallib is embedded in the binary), plus a
+  # cpu-only x64 build cross-compiled on the same arm64 runner.
+  # ---------------------------------------------------------------------------
+  build-macos:
+    runs-on: macos-14
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - backend: metal
+            arch: arm64
+            cmake_args: "-DCED_GGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON"
+          - backend: cpu
+            arch: x64
+            cmake_args: "-DCMAKE_OSX_ARCHITECTURES=x86_64"
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Determine version
+        id: ver
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Configure
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_NATIVE=OFF \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DCED_BUILD_CLI=ON \
+            -DCED_BUILD_TESTS=OFF \
+            ${{ matrix.cmake_args }}
+
+      - name: Build
+        run: cmake --build build -j"$(getconf _NPROCESSORS_ONLN)"
+
+      - name: Smoke test (usage banner)
+        if: matrix.arch == 'arm64'
+        run: |
+          out=$(./build/examples/cli/ced-cli 2>&1 || true)
+          grep -qi usage <<<"$out"
+
+      - name: Package (CLI)
+        id: pack
+        run: |
+          BUNDLE="ced-${{ steps.ver.outputs.version }}-bin-macos-${{ matrix.backend }}-${{ matrix.arch }}"
+          mkdir "$BUNDLE"
+          cp build/examples/cli/ced-cli LICENSE README.md "$BUNDLE"/
+          tar -czf "$BUNDLE.tar.gz" "$BUNDLE"
+          echo "bundle=$BUNDLE" >> "$GITHUB_OUTPUT"
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.pack.outputs.bundle }}
+          path: ${{ steps.pack.outputs.bundle }}.tar.gz
+          if-no-files-found: error
+
+      - name: Configure (shared C-API lib)
+        run: |
+          cmake -B build-shared \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_NATIVE=OFF \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+            -DCED_SHARED=ON \
+            -DCED_BUILD_CLI=OFF \
+            -DCED_BUILD_TESTS=OFF \
+            ${{ matrix.cmake_args }}
+
+      - name: Build (shared C-API lib)
+        run: cmake --build build-shared -j"$(getconf _NPROCESSORS_ONLN)"
+
+      - name: Package (shared C-API lib)
+        id: pack_lib
+        run: |
+          BUNDLE="ced-${{ steps.ver.outputs.version }}-lib-macos-${{ matrix.backend }}-${{ matrix.arch }}"
+          mkdir "$BUNDLE"
+          cp build-shared/libced.dylib include/ced_capi.h LICENSE README.md "$BUNDLE"/
+          tar -czf "$BUNDLE.tar.gz" "$BUNDLE"
+          echo "bundle=$BUNDLE" >> "$GITHUB_OUTPUT"
+
+      - name: Upload shared C-API lib artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.pack_lib.outputs.bundle }}
+          path: ${{ steps.pack_lib.outputs.bundle }}.tar.gz
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # windows: MSVC via Ninja (ilammy/msvc-dev-cmd provides the cl environment).
+  # ---------------------------------------------------------------------------
+  build-windows:
+    runs-on: windows-2022
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - backend: cpu
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Determine version
+        id: ver
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Configure
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_NATIVE=OFF \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DCED_BUILD_CLI=ON \
+            -DCED_BUILD_TESTS=OFF
+
+      - name: Build
+        run: cmake --build build -j
+
+      - name: Smoke test (usage banner)
+        run: |
+          out=$(./build/examples/cli/ced-cli.exe 2>&1 || true)
+          grep -qi usage <<<"$out"
+
+      - name: Package (CLI)
+        id: pack
+        shell: pwsh
+        run: |
+          $bundle = "ced-${{ steps.ver.outputs.version }}-bin-win-${{ matrix.backend }}-x64"
+          New-Item -ItemType Directory -Path $bundle | Out-Null
+          Copy-Item build/examples/cli/ced-cli.exe,LICENSE,README.md $bundle/
+          Compress-Archive -Path $bundle -DestinationPath "$bundle.zip"
+          "bundle=$bundle" | Out-File -Append $env:GITHUB_OUTPUT
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.pack.outputs.bundle }}
+          path: ${{ steps.pack.outputs.bundle }}.zip
+          if-no-files-found: error
+
+      - name: Configure (shared C-API lib)
+        run: |
+          cmake -B build-shared -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_NATIVE=OFF \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+            -DCED_SHARED=ON \
+            -DCED_BUILD_CLI=OFF \
+            -DCED_BUILD_TESTS=OFF
+
+      - name: Build (shared C-API lib)
+        run: cmake --build build-shared -j
+
+      - name: Package (shared C-API lib)
+        id: pack_lib
+        shell: pwsh
+        run: |
+          $bundle = "ced-${{ steps.ver.outputs.version }}-lib-win-${{ matrix.backend }}-x64"
+          New-Item -ItemType Directory -Path $bundle | Out-Null
+          Copy-Item build-shared/ced.dll,include/ced_capi.h,LICENSE,README.md $bundle/
+          Compress-Archive -Path $bundle -DestinationPath "$bundle.zip"
+          "bundle=$bundle" | Out-File -Append $env:GITHUB_OUTPUT
+
+      - name: Upload shared C-API lib artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.pack_lib.outputs.bundle }}
+          path: ${{ steps.pack_lib.outputs.bundle }}.zip
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # release: attach every bundle to the GitHub release for the tag. Creates a
+  # draft release if none exists yet.
+  # ---------------------------------------------------------------------------
+  release:
+    if: github.ref_type == 'tag'
+    needs: [build-linux, build-macos, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Upload assets to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --verify-tag \
+              --title "$TAG" --notes "Pre-built binaries for $TAG"
+          fi
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber dist/*

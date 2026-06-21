@@ -1,0 +1,47 @@
+#pragma once
+#include <string>
+#include <vector>
+
+#include "model_loader.hpp"
+
+namespace ced {
+
+class Ced {
+public:
+    bool load(const std::string& path);
+    const CedConfig& config() const { return loader_.config(); }
+
+    // Parity entry point: run the 12 ViT blocks + final norm + mean-pool head
+    // from precomputed patch tokens. `tokens` is n_tokens * embed_dim, token-
+    // major (token t, channel c at t*embed_dim + c) — matching the baseline
+    // `tokens_in` dump. Fills:
+    //   enc_norm: n_tokens * embed_dim (post final LayerNorm)
+    //   logits:   outputdim            (pre-sigmoid)
+    //   probs:    outputdim            (post-sigmoid)
+    bool forward_from_tokens(const std::vector<float>& tokens, int n_tokens,
+                             std::vector<float>& enc_norm,
+                             std::vector<float>& logits,
+                             std::vector<float>& probs, int n_threads = 4);
+
+    // Mel frontend: waveform -> input_values [n_mels * T] (mel-major), T frames.
+    bool mel_frontend(const std::vector<float>& wav, std::vector<float>& input_values,
+                      int& T);
+
+    // init_bn + patch_embed + positional + flatten: input_values [n_mels*T] ->
+    // tokens [n_tokens * embed_dim] (token-major). Also exposes intermediates
+    // (init_bn_out [n_mels*T], patch_embed/pos_out [embed_dim*OH*OW]) for parity.
+    bool embed_from_input_values(const std::vector<float>& input_values, int T,
+                                 std::vector<float>& init_bn_out,
+                                 std::vector<float>& patch_embed,
+                                 std::vector<float>& pos_out, std::vector<float>& tokens,
+                                 int& n_tokens, int n_threads = 4);
+
+    // End-to-end: waveform -> logits/probs over the 527 AudioSet classes.
+    bool classify(const std::vector<float>& wav, std::vector<float>& logits,
+                  std::vector<float>& probs, int n_threads = 4);
+
+private:
+    ModelLoader loader_;
+};
+
+}  // namespace ced

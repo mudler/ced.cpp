@@ -1,0 +1,23 @@
+# Keep the build context small and reproducible. The ggml submodule source
+# under third_party/ggml IS needed and must stay in the context.
+
+.git
+.github
+.venv
+.cache
+.claude
+build*/
+build-shared/
+build-asan/
+
+# Large / derived artifacts that never belong in an image build.
+models/*
+!models/MANIFEST.md
+*.gguf
+media/
+
+# Local scratch.
+__pycache__/
+*.pyc
+out/
+tmp/
