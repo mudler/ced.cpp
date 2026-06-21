@@ -63,11 +63,12 @@ ced.cpp is faster than the PyTorch reference on CPU and uses a fraction of the m
 
 | | latency / clip | realtime factor | peak RAM |
 | --- | --- | --- | --- |
-| PyTorch (`transformers` + `torchaudio`, f32) | 155.7 ms | 65x | 717 MB |
-| **ced.cpp f16** | **100.6 ms** | **100x** | 189 MB |
-| ced.cpp q8_0 | 117.2 ms | 86x | 111 MB |
+| PyTorch (`transformers` + `torchaudio`, f32) | 158.8 ms | 64x | 717 MB |
+| **ced.cpp f32** (same precision) | **126.6 ms** | 80x | 354 MB |
+| ced.cpp f16 | 102.9 ms | 98x | 189 MB |
+| ced.cpp q8_0 | 117.1 ms | 86x | 111 MB |
 
-f16 is ~1.55x faster than PyTorch; q8_0 uses ~6.5x less memory. And there is no multi-second `import torch` startup: `ced-cli` loads and classifies in well under a second.
+Same precision (f32 vs f32), ced.cpp is **~1.25x faster and uses 2x less memory** than PyTorch. The near-lossless quantized configs you would actually ship go further: f16 is ~1.5x faster, and q8_0 drops to 111 MB (~6.5x less than PyTorch). There is also no multi-second `import torch` startup - `ced-cli` loads and classifies in well under a second.
 
 Measure it yourself:
 

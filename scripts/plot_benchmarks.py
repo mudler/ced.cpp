@@ -62,20 +62,23 @@ def bars(ax, labels, values, colors, fmt, sub=None):
 
 
 # ---- figure 1: speed + memory --------------------------------------------
-fig, (a1, a2) = plt.subplots(1, 2, figsize=(11, 4.4))
-labels = ["PyTorch\nf32", "ced.cpp\nf16", "ced.cpp\nq8_0"]
-cols = [GRAY, CYAN, CYAN2]
+# Lead with the apples-to-apples PyTorch f32 vs ced.cpp f32 pair; f16/q8_0 are
+# the near-lossless quantized configs you'd actually ship.
+CYAN0 = "#2596be"    # ced.cpp f32 (darker cyan, the same-precision comparison)
+fig, (a1, a2) = plt.subplots(1, 2, figsize=(12, 4.4))
+labels = ["PyTorch\nf32", "ced.cpp\nf32", "ced.cpp\nf16", "ced.cpp\nq8_0"]
+cols = [GRAY, CYAN0, CYAN, CYAN2]
 
 style(a1, "Latency per 10 s clip  (lower is better)")
-bars(a1, labels, [155.7, 100.6, 117.2], cols, lambda v: f"{v:.0f} ms",
-     sub=["65x RT", "100x RT", "86x RT"])
+bars(a1, labels, [158.8, 126.6, 102.9, 117.1], cols, lambda v: f"{v:.0f} ms",
+     sub=["64x RT", "80x RT", "98x RT", "86x RT"])
 
 style(a2, "Peak memory  (lower is better)")
-bars(a2, labels, [717, 189, 111], cols, lambda v: f"{v:.0f} MB")
+bars(a2, labels, [717, 354, 189, 111], cols, lambda v: f"{v:.0f} MB")
 
 fig.suptitle("ced.cpp vs PyTorch CED on CPU  -  ced-base, Ryzen 9 9950X3D, 4 threads",
              color=DIM, fontsize=11, y=1.0, x=0.5)
-fig.tight_layout(rect=(0, 0, 1, 0.96))
+fig.tight_layout(rect=(0, 0, 1, 0.95))
 fig.savefig("media/bench.png", dpi=150)
 print("wrote media/bench.png")
 

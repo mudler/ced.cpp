@@ -16,22 +16,24 @@ numerically (see [parity](../README.md)); this measures speed and memory.
 
 | Implementation        | 4-thread mean | 4-thread RTF | 1-thread mean | peak RSS |
 |-----------------------|--------------:|-------------:|--------------:|---------:|
-| PyTorch (transformers, f32) | 155.7 ms | 65x | 399.1 ms | 717 MB |
-| **ced.cpp f32**       | 124.7 ms | 81x  | 433.3 ms | 354 MB |
-| **ced.cpp f16**       | **100.6 ms** | **100x** | 354.3 ms | 189 MB |
-| **ced.cpp q8_0**      | 117.2 ms | 86x  | 410.3 ms | **111 MB** |
+| PyTorch (transformers, f32) | 158.8 ms | 64x | 399.1 ms | 717 MB |
+| **ced.cpp f32** (same precision) | 126.6 ms | 80x  | 433.3 ms | 354 MB |
+| **ced.cpp f16**       | **102.9 ms** | **98x** | 354.3 ms | 189 MB |
+| **ced.cpp q8_0**      | 117.1 ms | 86x  | 410.3 ms | **111 MB** |
 
-RTF = clip seconds / inference seconds (higher is faster; 100x = 100 s of audio
+RTF = clip seconds / inference seconds (higher is faster; ~100x = 100 s of audio
 classified per wall-second).
 
 ## Takeaways
 
-- **f16 is the CPU sweet spot**: 100.6 ms/clip, **1.55x faster than PyTorch** at
-  4 threads, and ~100x realtime. tinyBLAS's f16 GEMM is the win; q8_0 is slightly
-  slower (dequant overhead) but the smallest footprint.
-- **Memory**: ced.cpp q8_0 uses **111 MB vs PyTorch's 717 MB (6.5x less)**; f16 is
-  3.8x less. No Python/torch runtime is resident.
-- **Speedup at 4 threads vs PyTorch**: f16 1.55x, q8_0 1.33x, f32 1.25x.
+- **Same precision (f32 vs f32)** is the apples-to-apples comparison: ced.cpp is
+  **~1.25x faster (126.6 vs 158.8 ms) and uses 2x less memory (354 vs 717 MB)**
+  than PyTorch, at the same numerical output.
+- **The quantized configs go further** (near-lossless: identical top-5 tags):
+  **f16 is the CPU sweet spot** at 102.9 ms/clip (~1.5x faster than PyTorch f32,
+  ~100x realtime - tinyBLAS's f16 GEMM is the win), and **q8_0 drops to 111 MB**
+  (~6.5x less than PyTorch) for a small dequant-overhead latency cost.
+- **No Python/torch runtime is resident**, so peak RAM is much lower across the board.
 - **Single thread**: ced.cpp f16/q8 still beat PyTorch, but f32 is marginally
   slower (PyTorch's oneDNN GEMM is strong single-threaded). On CPU, prefer f16.
 - **Cold start**: `ced-cli classify` (model load + inference) completes in ~0.15 s
