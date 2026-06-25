@@ -1,0 +1,56 @@
+{
+  "model": "ced-base",
+  "precision": "f16",
+  "gguf": "models/ced-base-f16.gguf",
+  "cpu": "AMD Ryzen 9 9950X3D",
+  "threads": 4,
+  "num_classes": 527,
+  "stat": "median latency over 30 iters, ced-cli bench, warm; tags from ced-cli classify --top-k 5",
+  "clips": [
+    {
+      "name": "rooster",
+      "file": "clips/rooster.wav",
+      "title": "Rooster crowing",
+      "seconds": 6.0,
+      "latency_ms": 55.1,
+      "rtf": 108.3,
+      "tags": [
+        ["Chicken, rooster", 0.9175],
+        ["Fowl", 0.6804],
+        ["Crowing, cock-a-doodle-doo", 0.5920],
+        ["Cluck", 0.4662],
+        ["Bird", 0.3754]
+      ]
+    },
+    {
+      "name": "thunder",
+      "file": "clips/thunder.wav",
+      "title": "Thunderstorm",
+      "seconds": 6.0,
+      "latency_ms": 55.4,
+      "rtf": 106.6,
+      "tags": [
+        ["Thunderstorm", 0.8940],
+        ["Thunder", 0.8759],
+        ["Rain", 0.7708],
+        ["Rain on surface", 0.2243],
+        ["Raindrop", 0.1838]
+      ]
+    },
+    {
+      "name": "guitar",
+      "file": "clips/guitar.wav",
+      "title": "Acoustic guitar",
+      "seconds": 6.0,
+      "latency_ms": 54.4,
+      "rtf": 109.9,
+      "tags": [
+        ["Music", 0.8389],
+        ["Guitar", 0.5285],
+        ["Musical instrument", 0.5231],
+        ["Plucked string instrument", 0.4708],
+        ["Acoustic guitar", 0.4555]
+      ]
+    }
+  ]
+}
