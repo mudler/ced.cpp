@@ -14,9 +14,11 @@ It is wired into [LocalAI](https://github.com/mudler/LocalAI) as the `ced` backe
 
 ### See it run
 
-The same clip fed to ced.cpp and to the original PyTorch CED, on the same CPU. Same tags, ced.cpp just gets there first, with no Python in the loop:
+Three real sounds, named on CPU. Each clip's mel-spectrogram is what the model sees; the bars are the real top-5 AudioSet tags with their confidences, tagged in ~55 ms with no Python in the loop ([1:1 cut for socials](media/demo_square.gif)):
 
-![ced.cpp vs PyTorch CED: same tags, ced.cpp finishes first](media/demo.gif)
+![ced.cpp hears three real sounds and names them with confidence on CPU](media/demo.gif)
+
+> Every tag, confidence and latency above is a real `ced-cli` output on the clips in [`benchmarks/demo/clips`](benchmarks/demo/clips) (Public-Domain audio). Reproduce the reel with [`benchmarks/demo/make.sh`](benchmarks/demo).
 
 ---
 
